@@ -20,11 +20,11 @@ from .context_manager import ContextManager, LearningContext, Pattern, StrategyP
 
 # Import subagents (to be implemented)
 from .subagents.pattern_discovery import PatternDiscoveryAgent
-from .subagents.validation import ValidationAgent
-from .subagents.strategy_optimizer import StrategyOptimizationAgent
-from .subagents.threshold_tuner import ThresholdTuningAgent
+from .subagents.validation import ValidationAgent  # Now implemented!
+# from .subagents.strategy_optimizer import StrategyOptimizationAgent  # Not implemented yet
+# from .subagents.threshold_tuner import ThresholdTuningAgent  # Not implemented yet
 from .subagents.temporal_analyzer import TemporalAnalyzerAgent
-from .subagents.meta_learner import MetaLearningAgent
+# from .subagents.meta_learner import MetaLearningAgent  # Not implemented yet
 
 logger = logging.getLogger(__name__)
 
@@ -112,25 +112,28 @@ class EnhancedOrchestrator:
                 self.config['agents']['validation']
             )
 
-        if self.config['agents']['strategy_optimization']['enabled']:
-            agents['strategy_optimization'] = StrategyOptimizationAgent(
-                self.config['agents']['strategy_optimization']
-            )
+        # Strategy optimization agent - not implemented yet
+        # if self.config['agents']['strategy_optimization']['enabled']:
+        #     agents['strategy_optimization'] = StrategyOptimizationAgent(
+        #         self.config['agents']['strategy_optimization']
+        #     )
 
-        if self.config['agents']['threshold_tuning']['enabled']:
-            agents['threshold_tuning'] = ThresholdTuningAgent(
-                self.config['agents']['threshold_tuning']
-            )
+        # Threshold tuning agent - not implemented yet
+        # if self.config['agents']['threshold_tuning']['enabled']:
+        #     agents['threshold_tuning'] = ThresholdTuningAgent(
+        #         self.config['agents']['threshold_tuning']
+        #     )
 
         if self.config['agents']['temporal_analyzer']['enabled']:
             agents['temporal_analyzer'] = TemporalAnalyzerAgent(
                 self.config['agents']['temporal_analyzer']
             )
 
-        if self.config['agents']['meta_learner']['enabled']:
-            agents['meta_learner'] = MetaLearningAgent(
-                self.config['agents']['meta_learner']
-            )
+        # Meta-learner agent - not implemented yet
+        # if self.config['agents']['meta_learner']['enabled']:
+        #     agents['meta_learner'] = MetaLearningAgent(
+        #         self.config['agents']['meta_learner']
+        #     )
 
         logger.info(f"Initialized {len(agents)} subagents")
         return agents

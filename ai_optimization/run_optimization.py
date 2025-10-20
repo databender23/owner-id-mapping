@@ -12,13 +12,14 @@ import logging
 import sys
 from pathlib import Path
 from datetime import datetime
+from typing import Dict, Any, Optional
 import pandas as pd
 import yaml
 
 # Add parent directory to path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from owner_matcher.main import load_data, preprocess_data
+from owner_matcher.main import load_old_owners, load_new_owners, preprocess_old_owners, preprocess_new_owners
 from owner_matcher.matchers import OwnerMapper
 from owner_matcher.config import OUTPUT_FILE
 
@@ -104,12 +105,19 @@ async def run_optimization_iteration(
 
     # Load data
     logger.info("Loading data...")
-    old_df, new_df = await asyncio.to_thread(load_data, use_snowflake)
+    from owner_matcher.config import OLD_FILE, NEW_FILE
+    if use_snowflake:
+        # When using Snowflake, load_new_owners handles the query
+        old_df = await asyncio.to_thread(load_old_owners, OLD_FILE)
+        new_df = await asyncio.to_thread(load_new_owners, file_path=None, use_snowflake=True)
+    else:
+        old_df = await asyncio.to_thread(load_old_owners, OLD_FILE)
+        new_df = await asyncio.to_thread(load_new_owners, NEW_FILE, use_snowflake=False)
 
     # Preprocess data
     logger.info("Preprocessing data...")
-    old_df = await asyncio.to_thread(preprocess_data, old_df)
-    new_df = await asyncio.to_thread(preprocess_data, new_df, is_new=True)
+    old_df = await asyncio.to_thread(preprocess_old_owners, old_df)
+    new_df = await asyncio.to_thread(preprocess_new_owners, new_df)
 
     # Get current configuration from orchestrator
     current_config = orchestrator._get_current_thresholds()

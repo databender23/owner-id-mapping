@@ -61,7 +61,23 @@ class PatternDiscoveryAgent:
         # Initialize Claude client if API analysis is enabled
         self.use_ai = config.get('use_ai', True)
         if self.use_ai:
-            self.claude_client = anthropic.Anthropic()
+            try:
+                # API key can be set via:
+                # 1. Environment variable: ANTHROPIC_API_KEY
+                # 2. Passed directly (not recommended for production)
+                import os
+                api_key = os.environ.get('ANTHROPIC_API_KEY')
+                if api_key:
+                    self.claude_client = anthropic.Anthropic(api_key=api_key)
+                else:
+                    # Try default initialization (will use ANTHROPIC_API_KEY env var)
+                    self.claude_client = anthropic.Anthropic()
+                logger.info("Claude AI client initialized successfully")
+            except Exception as e:
+                logger.warning(f"Claude AI initialization failed: {e}")
+                logger.warning("AI features disabled. Set ANTHROPIC_API_KEY environment variable to enable.")
+                self.use_ai = False
+                self.claude_client = None
 
         # Pattern storage
         self.discovered_patterns = []
