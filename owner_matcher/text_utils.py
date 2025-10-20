@@ -106,12 +106,73 @@ def clean_text(text: Optional[str]) -> str:
             flags=re.IGNORECASE
         )
 
+    # Apply entity suffix normalization (before removing punctuation)
+    text = normalize_entity_suffixes(text)
+
     # Remove punctuation
     text = re.sub(CLEAN_PUNCT, ' ', text)
 
     # Normalize whitespace
     text = text.strip()
     return ' '.join(text.split())
+
+
+def normalize_entity_suffixes(text: str) -> str:
+    """
+    Normalize entity suffixes to standard forms based on AI-discovered patterns.
+
+    This function standardizes common business entity suffixes to improve matching.
+    Based on patterns discovered by AI optimization in Iteration 1.
+
+    Args:
+        text: Text potentially containing entity suffixes
+
+    Returns:
+        Text with normalized entity suffixes
+
+    Examples:
+        >>> normalize_entity_suffixes("Smith Oil Company")
+        'Smith Oil co'
+        >>> normalize_entity_suffixes("ABC Limited Liability Company")
+        'ABC llc'
+    """
+    if not text:
+        return text
+
+    # Entity suffix mappings discovered by AI
+    suffix_mappings = {
+        # LLC variations
+        r'\blimited liability company\b': 'llc',
+        r'\bl\.l\.c\.\b': 'llc',
+        r'\bl l c\b': 'llc',
+
+        # Inc variations
+        r'\bincorporated\b': 'inc',
+        r'\binc\.\b': 'inc',
+
+        # Corp variations
+        r'\bcorporation\b': 'corp',
+        r'\bcorp\.\b': 'corp',
+
+        # Ltd variations
+        r'\blimited\b': 'ltd',
+        r'\bltd\.\b': 'ltd',
+
+        # LP variations
+        r'\blimited partnership\b': 'lp',
+        r'\bl\.p\.\b': 'lp',
+        r'\bl p\b': 'lp',
+
+        # Company variations
+        r'\bcompany\b': 'co',
+        r'\bco\.\b': 'co',
+    }
+
+    result = text.lower()
+    for pattern, replacement in suffix_mappings.items():
+        result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)
+
+    return result
 
 
 def extract_po_box_or_zip(address: str) -> Optional[str]:

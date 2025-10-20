@@ -19,9 +19,14 @@ import yaml
 # Add parent directory to path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from owner_matcher.main import load_old_owners, load_new_owners, preprocess_old_owners, preprocess_new_owners
+from owner_matcher.main import (
+    load_old_owners, load_new_owners,
+    preprocess_old_owners, preprocess_new_owners,
+    map_owners_snowflake, preprocess_snowflake_data
+)
 from owner_matcher.matchers import OwnerMapper
 from owner_matcher.config import OUTPUT_FILE
+from owner_matcher.snowflake_client import fetch_new_owners_from_snowflake
 
 from agents.orchestrator import EnhancedOrchestrator
 from agents.context_manager import ContextManager
@@ -68,17 +73,34 @@ async def run_matching_iteration(
     mapper = OwnerMapper()
     results = []
 
-    for _, old_row in old_df.iterrows():
-        match_result = mapper.find_match(old_row, new_df)
-        results.append(match_result)
+    for idx, old_row in old_df.iterrows():
+        # Create state-filtered subset for matching
+        old_state = old_row.get('EXCLUDE_STATE', old_row.get('clean_state', ''))
+        if old_state and not pd.isna(old_state):
+            new_subset = new_df[new_df['PROD_STATE'] == old_state]
+        else:
+            new_subset = new_df  # If no state, use full dataset
+
+        match_result = mapper.match_owner(old_row, new_df, new_subset)
+
+        # Convert to dict and add additional fields
+        result_dict = vars(match_result)
+        result_dict['old_owner_id'] = old_row.get('OLD_OWNER_ID', '')
+        result_dict['old_owner_name'] = old_row.get('EXCLUDE_OWNER_NAME', '')
+
+        results.append(result_dict)
 
     # Convert results to DataFrame
-    results_df = pd.DataFrame([vars(r) for r in results])
+    results_df = pd.DataFrame(results)
 
-    # Merge with original data
-    final_df = pd.concat([old_df, results_df], axis=1)
+    # Add clean_name column for AI agents
+    if 'old_owner_name' in results_df.columns:
+        from owner_matcher.text_utils import clean_text
+        results_df['clean_name'] = results_df['old_owner_name'].apply(
+            lambda x: clean_text(x) if pd.notna(x) else ''
+        )
 
-    return final_df
+    return results_df
 
 
 async def run_optimization_iteration(
@@ -105,19 +127,42 @@ async def run_optimization_iteration(
 
     # Load data
     logger.info("Loading data...")
-    from owner_matcher.config import OLD_FILE, NEW_FILE
     if use_snowflake:
-        # When using Snowflake, load_new_owners handles the query
-        old_df = await asyncio.to_thread(load_old_owners, OLD_FILE)
-        new_df = await asyncio.to_thread(load_new_owners, file_path=None, use_snowflake=True)
+        # Load data directly from Snowflake
+        logger.info("Fetching data from Snowflake...")
+        snowflake_df = await asyncio.to_thread(fetch_new_owners_from_snowflake)
+
+        # Separate and preprocess data
+        original_df, already_matched, needs_matching = await asyncio.to_thread(
+            preprocess_snowflake_data, snowflake_df
+        )
+
+        # For optimization, we work with the unmatched records
+        # Set up data frames for matching
+        if len(needs_matching) > 0:
+            old_df = needs_matching  # Unmatched records become "old owners" to match
+            new_df = already_matched  # Already matched records are candidates
+            logger.info(f"Processing {len(old_df)} unmatched records against {len(new_df)} potential matches")
+        else:
+            logger.warning("No unmatched records to process")
+            old_df = pd.DataFrame()
+            new_df = pd.DataFrame()
     else:
+        # Legacy Excel file loading
+        from owner_matcher.config import OLD_FILE, NEW_FILE
         old_df = await asyncio.to_thread(load_old_owners, OLD_FILE)
         new_df = await asyncio.to_thread(load_new_owners, NEW_FILE, use_snowflake=False)
 
-    # Preprocess data
-    logger.info("Preprocessing data...")
-    old_df = await asyncio.to_thread(preprocess_old_owners, old_df)
-    new_df = await asyncio.to_thread(preprocess_new_owners, new_df)
+        # Preprocess Excel data
+        old_df = await asyncio.to_thread(preprocess_old_owners, old_df)
+        new_df = await asyncio.to_thread(preprocess_new_owners, new_df)
+
+    # Skip preprocessing if already done for Snowflake
+    if not use_snowflake:
+        # Only preprocess for Excel workflow (already done for Snowflake)
+        logger.info("Preprocessing data...")
+        # Already preprocessed in the else block above
+        pass
 
     # Get current configuration from orchestrator
     current_config = orchestrator._get_current_thresholds()

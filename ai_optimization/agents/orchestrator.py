@@ -168,8 +168,8 @@ class EnhancedOrchestrator:
                 logger.info(f"Loaded context from iteration {context.current_iteration}")
 
         # Prepare data for subagents
-        unmatched_records = match_results_df[match_results_df['mapped_new_id'].isna()]
-        matched_records = match_results_df[~match_results_df['mapped_new_id'].isna()]
+        unmatched_records = match_results_df[match_results_df['new_id'].isna()]
+        matched_records = match_results_df[~match_results_df['new_id'].isna()]
 
         # Create tasks for subagents
         tasks = self._create_subagent_tasks(
@@ -257,8 +257,9 @@ class EnhancedOrchestrator:
                 agent_name='validation',
                 task_type='validate_matches',
                 input_data={
-                    'matches': matched_records,
-                    'sample_size': self.config['agents']['validation']['sample_size'],
+                    'matches_df': matched_records,  # Changed from 'matches' to 'matches_df'
+                    'old_owners_df': None,  # Will be populated if needed
+                    'new_owners_df': None,  # Will be populated if needed
                     'iteration': self.current_iteration
                 },
                 priority='high',

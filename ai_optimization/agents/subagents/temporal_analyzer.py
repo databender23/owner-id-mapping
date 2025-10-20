@@ -180,7 +180,8 @@ class TemporalAnalyzerAgent:
         Returns:
             TemporalChange object or None if no temporal pattern found
         """
-        name = str(row.get('Owner Name', ''))
+        # Determine name column - use Snowflake column names
+        name = str(row.get('old_owner_name', row.get('EXCLUDE_OWNER_NAME', '')))
         clean_name = str(row.get('clean_name', ''))
 
         if not name or len(name) < 3:
@@ -424,6 +425,7 @@ class TemporalAnalyzerAgent:
                 patterns.append({
                     'pattern': f"separator_{separator}_pattern",
                     'separator': separator,
+                    'change_type': 'separator_based',  # Add default change_type
                     'frequency': len(changes),
                     'confidence': 0.9,
                     'examples': [

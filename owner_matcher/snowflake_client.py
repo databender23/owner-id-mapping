@@ -214,30 +214,31 @@ class SnowflakeClient:
         with open(query_file, 'r') as f:
             query = f.read()
 
-        # Remove comments and clean up query
-        # Keep the actual SQL, remove comment blocks
+        # Simple approach: just remove full-line comments but keep the SQL
         query_lines = []
-        in_comment_block = False
 
         for line in query.split('\n'):
+            # Keep lines that are not pure comments or empty
+            # But preserve inline comments within SQL statements
             stripped = line.strip()
 
-            # Toggle comment block
-            if '-- ========' in stripped:
-                in_comment_block = not in_comment_block
-                continue
-
-            # Skip comment lines
-            if stripped.startswith('--'):
-                continue
-
-            # Skip empty lines in comment blocks
-            if in_comment_block:
-                continue
-
-            query_lines.append(line)
+            # Skip lines that are only comments or empty
+            if stripped and not stripped.startswith('--'):
+                query_lines.append(line)
+            # Also keep lines that start with -- but contain SQL keywords (for inline comments in SQL)
+            elif stripped.startswith('-- ') and any(kw in line.upper() for kw in ['WITH', 'SELECT', 'FROM', 'WHERE', 'JOIN']):
+                query_lines.append(line)
 
         clean_query = '\n'.join(query_lines).strip()
+
+        # Debug: Check if query is empty
+        if not clean_query:
+            logger.error("Query is empty after processing!")
+            logger.debug(f"Original query length: {len(query)}")
+            logger.debug(f"First 500 chars of original: {query[:500]}")
+        else:
+            logger.debug(f"Query length: {len(clean_query)} chars")
+            logger.debug(f"First 200 chars: {clean_query[:200]}...")
 
         # Execute query
         logger.info("Fetching excluded owners comparison data from Snowflake...")

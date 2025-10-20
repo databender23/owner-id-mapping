@@ -2,13 +2,111 @@
 
 ## Your Mission
 
-You are an AI engineering assistant tasked with running the enhanced owner ID matching optimization system, debugging any issues that arise, and providing a comprehensive status report. This system uses multiple AI agents working in parallel to optimize fuzzy matching between old and new owner records in an oil & gas database.
+You are an AI orchestration agent responsible for iteratively improving the owner ID matching system through a structured 3-iteration optimization process. You will coordinate multiple specialized subagents, implement their suggestions, track changes, and validate improvements to maximize match rates while maintaining <3% false positive rate.
 
-## Background Context
+## System Architecture & Current Performance
 
-This system attempts to match ~2,484 old owner records to ~4,767 new owner records. The current baseline match rate is 5.9% (147 matches). The goal is to increase this to 30-40% through iterative optimization while maintaining <5% false positive rate.
+**Current System Status (as of latest optimization):**
+- **Overall match rate: 43.5%** (1,847 matches out of 4,244 records)
+  - SQL Direct Matches: 38.2% (1,622 records) - pre-validated, no optimization needed
+  - Fuzzy Matches: 5.3% (225 records) - focus area for optimization
+- **Validation Results**: 97.3% of fuzzy matches validated as reliable
+- **False positive rate**: <3% (only 6 medium-risk matches detected)
+- **Goal**: Achieve 50-55% overall match rate through iterative improvements
+
+## Iteration Process Overview
+
+You will execute **3 optimization iterations**, with each iteration:
+1. **Analyzing** current matching performance and unmatched records
+2. **Discovering** patterns and improvement opportunities via subagents
+3. **Implementing** specific improvements suggested by subagents
+4. **Validating** changes to ensure quality
+5. **Tracking** all changes and their impact
+
+### Iteration 1: Pattern Discovery & Threshold Optimization
+**Objective**: Discover patterns in unmatched records and optimize thresholds
+
+**Subagent Delegation**:
+- **Pattern Discovery Agent**: Analyze unmatched records for patterns
+- **Temporal Analyzer**: Identify name changes over time
+- **Threshold Tuner**: Recommend threshold adjustments
+
+**Expected Implementations**:
+- Adjust matching thresholds based on analysis
+- Document discovered patterns
+- Create pattern-based rules
+
+### Iteration 2: Data Quality & Algorithm Enhancements
+**Objective**: Implement data quality improvements and new matching strategies
+
+**Subagent Delegation**:
+- **Data Quality Agent** (create if needed): Implement data standardization
+- **Algorithm Enhancement Agent**: Add new matching strategies
+- **Validation Agent**: Validate new matches for false positives
+
+**Expected Implementations**:
+- Standardize address formats (PO Box, Suite variations)
+- Implement phonetic matching for names
+- Add estate/trust transition handling
+
+### Iteration 3: Fine-tuning & Consolidation
+**Objective**: Fine-tune all improvements and consolidate gains
+
+**Subagent Delegation**:
+- **Meta-Learning Agent**: Analyze what worked across iterations
+- **Validation Agent**: Final validation sweep
+- **Report Generator**: Create comprehensive improvement report
+
+**Expected Implementations**:
+- Final threshold adjustments
+- Consolidate successful patterns
+- Generate production-ready configuration
 
 Key challenge: Many owner names change over time (e.g., "Smith Oil; Attn: John" → "Smith Oil; Attn: Jane"), requiring special handling of temporal patterns.
+
+## Implementation Tracking Template
+
+For each iteration, track the following:
+
+```yaml
+iteration_N:
+  timestamp: YYYY-MM-DD HH:MM:SS
+  initial_metrics:
+    total_matches: X
+    fuzzy_matches: X
+    match_rate: X%
+
+  subagent_recommendations:
+    pattern_discovery:
+      - finding_1: description
+      - finding_2: description
+    temporal_analyzer:
+      - finding_1: description
+    threshold_tuner:
+      - recommendation_1: description
+
+  implementations:
+    - change_1:
+        type: threshold_adjustment
+        details: "NAME_THRESHOLD: 70 → 65"
+        files_modified: ["config.py"]
+    - change_2:
+        type: new_feature
+        details: "Added phonetic matching"
+        files_modified: ["matchers.py"]
+
+  results:
+    total_matches: X
+    fuzzy_matches: X
+    match_rate: X%
+    improvement: +X%
+    new_false_positives: X
+
+  validation:
+    validated_matches: X
+    risk_assessment: "Low/Medium/High"
+    manual_review_needed: X
+```
 
 ## Step-by-Step Execution Instructions
 
@@ -22,23 +120,19 @@ pwd  # Should be: /Users/grantbender/Databender/707_Advisors/owner_id_mapping
 
 # Verify project structure
 ls -la
-# Should see: owner_matcher/, ai_optimization/, data/, sql/, etc.
+# Should see: owner_matcher/, ai_optimization/, outputs/, sql/, venv/, .env
 
-# Check Python version (need 3.8+)
-python --version
+# CRITICAL: Activate virtual environment and load API keys
+source venv/bin/activate
 
-# Create virtual environment if it doesn't exist
-if [ ! -d "venv" ]; then
-    python -m venv venv
-fi
+# Load API key from .env file (REQUIRED for AI features)
+source .env
 
-# Activate virtual environment
-source venv/bin/activate  # On Mac/Linux
-# OR: venv\Scripts\activate  # On Windows
+# Verify API key is loaded
+echo "API Key Status:" && [ -n "$ANTHROPIC_API_KEY" ] && echo "✓ API key loaded" || echo "✗ API key missing"
 
-# Install dependencies
-pip install -r requirements.txt
-pip install -r ai_optimization/requirements-ai.txt
+# Verify all dependencies
+pip list | grep -E "pandas|rapidfuzz|snowflake|anthropic|aiosqlite"
 ```
 
 If any dependencies fail to install:
@@ -48,24 +142,25 @@ If any dependencies fail to install:
 
 ### 2. Data Verification
 
-Check that required data files exist:
+Verify Snowflake connection and data access:
 
 ```bash
-# Check for input data files
-ls -la data/raw/
-# Should see: missing_owners_report.xlsx and excluded_owners_comparison.xlsx
+# Check for Snowflake private key
+ls -la show_goat_rsa_key.pem
+# Should exist and have proper permissions
 
-# If files are missing, check for alternative locations
-find . -name "*.xlsx" -type f 2>/dev/null
+# Verify SQL query file exists
+ls -la sql/generate_excluded_owners_comparison.sql
 
-# Verify data file sizes (should not be empty)
-du -h data/raw/*.xlsx
+# Test Snowflake connection (optional - runs full matching)
+source venv/bin/activate
+python -m owner_matcher.main --use-snowflake --debug 2>&1 | head -50
 ```
 
-If data files are missing:
-- Check if they need to be generated from Snowflake
-- Look for backup locations
-- Document what's missing
+Note: We now pull data directly from Snowflake, not Excel files. This ensures:
+- Fresh data every run
+- SQL pre-matching for better results
+- No stale Excel files
 
 ### 3. Configuration Review
 
@@ -87,22 +182,95 @@ Verify critical settings:
 - Thresholds are reasonable (NAME_THRESHOLD: 70, ADDRESS_THRESHOLD: 75)
 - API keys are configured (if using Claude AI features)
 
-### 4. Run Single Optimization Iteration
+### 3. Execute 3-Iteration Optimization Process
 
-Execute one iteration of the optimization:
+Run the complete 3-iteration optimization cycle:
 
 ```bash
 # Create necessary directories
 mkdir -p ai_optimization/logs
 mkdir -p ai_optimization/context_store
 mkdir -p ai_optimization/iterations
+mkdir -p outputs
 
-# Run with local Excel files (simpler for testing)
+# Get baseline performance
+echo "=== BASELINE MEASUREMENT ==="
+python -m owner_matcher.main --use-snowflake | grep -A20 "SUMMARY"
+
+# ITERATION 1: Pattern Discovery & Threshold Optimization
+echo "=== ITERATION 1: Pattern Discovery ==="
 python ai_optimization/run_optimization.py \
     --iteration 1 \
     --mode enhanced \
-    --debug \
-    2>&1 | tee ai_optimization/logs/run_$(date +%Y%m%d_%H%M%S).log
+    --use-snowflake \
+    2>&1 | tee ai_optimization/logs/iteration1.log
+
+# Review iteration 1 results
+cat ai_optimization/iterations/iteration_001/report.md
+
+# ITERATION 2: Data Quality & Algorithm Enhancements
+echo "=== ITERATION 2: Algorithm Enhancements ==="
+# First, implement suggested changes from iteration 1
+# This may involve editing config.py, matchers.py, or text_utils.py
+# based on subagent recommendations
+
+python ai_optimization/run_optimization.py \
+    --iteration 2 \
+    --mode enhanced \
+    --use-snowflake \
+    2>&1 | tee ai_optimization/logs/iteration2.log
+
+# ITERATION 3: Fine-tuning & Consolidation
+echo "=== ITERATION 3: Fine-tuning ==="
+python ai_optimization/run_optimization.py \
+    --iteration 3 \
+    --mode enhanced \
+    --use-snowflake \
+    2>&1 | tee ai_optimization/logs/iteration3.log
+
+# Final validation
+python validate_fuzzy_matches.py
+
+# Generate summary report
+echo "=== FINAL RESULTS ==="
+python -m owner_matcher.main --use-snowflake | grep -A20 "SUMMARY"
+```
+
+### 4. Implementing Subagent Recommendations
+
+After each iteration, implement the recommended changes:
+
+#### Pattern-Based Improvements
+```python
+# In owner_matcher/config.py - Add new patterns discovered
+ESTATE_PATTERNS = [
+    r'estate\s+of',
+    r'deceased',
+    r'heir[s]?\s+of'
+]
+
+# In owner_matcher/matchers.py - Add specialized matcher
+class EstateTransitionMatcher(BaseMatchStrategy):
+    """Handle estate transitions and trust changes."""
+    # Implementation based on patterns discovered
+```
+
+#### Threshold Adjustments
+```python
+# In owner_matcher/config.py
+# Track changes with comments
+NAME_THRESHOLD = 62  # Iteration 2: reduced from 65 based on analysis
+ADDRESS_MIN = 50     # Iteration 2: reduced from 55 for partial matches
+```
+
+#### Data Quality Improvements
+```python
+# In owner_matcher/text_utils.py
+def standardize_po_box(text: str) -> str:
+    """Standardize PO Box variations."""
+    text = re.sub(r'p\.?\s*o\.?\s*box', 'PO BOX', text, flags=re.I)
+    text = re.sub(r'suite\s+', 'STE ', text, flags=re.I)
+    return text
 ```
 
 ### 5. Debug Common Issues
@@ -166,7 +334,41 @@ cat ai_optimization/iterations/iteration_001/report.md
 grep -i "error\|exception\|failed" ai_optimization/logs/*.log
 ```
 
-### 7. Run Analysis and Generate Status Report
+### 7. Validate Fuzzy Matches (SQL Direct Matches Don't Need Validation)
+
+**IMPORTANT**: Only validate fuzzy matches, not SQL_DIRECT matches:
+
+```python
+# Run validation on fuzzy matches only
+python validate_fuzzy_matches.py
+
+# The validation will:
+# 1. Filter out SQL_DIRECT matches (already validated by database)
+# 2. Analyze only fuzzy matches for false positives
+# 3. Calculate risk scores based on:
+#    - Name similarity
+#    - Address similarity
+#    - Match type (CROSS_STATE, PARTIAL_NAME are riskier)
+#    - State mismatches
+# 4. Output high-risk matches for manual review
+```
+
+Expected validation output:
+```
+FUZZY MATCH VALIDATION REPORT
+================================================================================
+Total Fuzzy Matches Validated: 225
+
+Validation Status Breakdown:
+  APPROVED       :  143 (63.6%)  # Safe to use
+  LOW_RISK       :   76 (33.8%)  # Likely valid
+  MEDIUM_RISK    :    6 (2.7%)   # Manual review needed
+  HIGH_RISK      :    0 (0.0%)   # Would be false positives
+
+Estimated False Positive Rate: <3%
+```
+
+### 8. Run Analysis and Generate Status Report
 
 Analyze the results and create a status report:
 
@@ -254,22 +456,56 @@ If things aren't working, systematically check:
 
 ### 9. Final Status Report Template
 
-After completing execution, report:
+After completing all 3 iterations, generate this report:
 
 ```markdown
-## Owner ID Matching Optimization - Execution Report
+## Owner ID Matching Optimization - 3-Iteration Execution Report
 
 ### ✅ Execution Summary
 - **Status**: [SUCCESS/PARTIAL/FAILED]
-- **Execution Time**: [X minutes]
-- **Errors Encountered**: [None/List issues]
-- **Iterations Completed**: [1 of 1]
+- **Total Execution Time**: [X minutes]
+- **Iterations Completed**: 3 of 3
+- **Changes Implemented**: [X threshold adjustments, Y new features, Z data improvements]
 
-### 📊 Performance Metrics
-- **Baseline Match Rate**: 5.9% (147 matches)
-- **Current Match Rate**: X.X% (XXX matches)
-- **Improvement**: +X.X%
-- **False Positive Risk**: [Low/Medium/High based on confidence scores]
+### 📊 Performance Progression
+
+| Metric | Baseline | Iter 1 | Iter 2 | Iter 3 | Total Gain |
+|--------|----------|--------|--------|--------|------------|
+| Match Rate | 43.5% | 44.2% | 46.8% | 48.5% | +5.0% |
+| Fuzzy Matches | 225 | 245 | 312 | 356 | +131 |
+| False Positive Rate | <3% | <3% | <3% | <3% | Maintained |
+
+### 🔄 Iteration-by-Iteration Changes
+
+#### Iteration 1: Pattern Discovery
+**Implemented Changes:**
+- Reduced NAME_THRESHOLD from 65 to 62
+- Reduced ADDRESS_MIN from 55 to 50
+- Discovered 15 temporal name patterns
+
+**Results:** +0.7% match rate, 20 new matches
+
+#### Iteration 2: Algorithm Enhancements
+**Implemented Changes:**
+- Added EstateTransitionMatcher
+- Implemented PO Box standardization
+- Added phonetic matching for names
+
+**Results:** +2.6% match rate, 67 new matches
+
+#### Iteration 3: Fine-tuning
+**Implemented Changes:**
+- Fine-tuned thresholds based on validation
+- Consolidated successful patterns
+- Optimized matching order
+
+**Results:** +1.7% match rate, 44 new matches
+
+### 🛡️ Validation Results (Fuzzy Matches Only)
+- **Total Fuzzy Matches**: 356
+- **Validated (Approved/Low Risk)**: 347 (97.5%)
+- **Medium Risk (Manual Review)**: 9 (2.5%)
+- **High Risk (False Positives)**: 0 (0%)
 
 ### 🔍 Key Findings
 1. **Patterns Discovered**: X patterns identified
@@ -312,14 +548,59 @@ After completing execution, report:
 3. **For production runs**: Remove `--debug` flag and increase iteration count
 4. **For large datasets**: Consider running with reduced sample first
 
-## Success Criteria
+## Success Criteria for 3-Iteration Process
 
-The execution is considered successful if:
-1. The system runs without critical errors
-2. Match rate improves from baseline (5.9%)
-3. Output files are generated correctly
-4. At least some patterns are discovered
-5. The system provides actionable recommendations
+The optimization is considered successful if:
+1. **All 3 iterations complete** without critical errors
+2. **Match rate improves by ≥3%** from baseline (43.5% → 46.5%+)
+3. **False positive rate stays <3%** (validated through fuzzy match validation)
+4. **At least 10 patterns discovered** and implemented
+5. **Each iteration shows measurable improvement** (even if small)
+6. **Change tracking is complete** for all implementations
+7. **Final validation confirms quality** of new matches
+
+## Delegation to Subagents for Implementation
+
+When subagents recommend new features, delegate implementation tasks:
+
+### Example Delegation Flow
+```yaml
+Iteration_2_Delegation:
+  pattern_discovery_finding: "Many records have 'Estate of' prefix"
+
+  delegated_task:
+    to: "Algorithm Enhancement Agent"
+    task: "Create EstateTransitionMatcher class"
+    requirements:
+      - Extract core name after "Estate of"
+      - Match against both full and core names
+      - Set confidence based on match type
+    expected_output: "New matcher in matchers.py"
+
+  implementation_verification:
+    - Run test cases with estate records
+    - Validate matches don't create false positives
+    - Measure improvement in match rate
+```
+
+## Post-Optimization Next Steps
+
+After completing all 3 iterations:
+
+1. **Production Deployment**:
+   - Save final configuration as `config_optimized.py`
+   - Document all changes in `OPTIMIZATION_LOG.md`
+   - Create rollback plan if needed
+
+2. **Continuous Monitoring**:
+   - Set up weekly validation runs
+   - Track drift in match rates
+   - Monitor false positive trends
+
+3. **Future Iterations**:
+   - Plan quarterly optimization cycles
+   - Incorporate new data patterns
+   - Refine based on user feedback
 
 ## Emergency Fallback
 

@@ -60,22 +60,43 @@ class PatternDiscoveryAgent:
 
         # Initialize Claude client if API analysis is enabled
         self.use_ai = config.get('use_ai', True)
+        self.claude_client = None
         if self.use_ai:
             try:
                 # API key can be set via:
                 # 1. Environment variable: ANTHROPIC_API_KEY
-                # 2. Passed directly (not recommended for production)
+                # 2. .env file in project root
+                # 3. Passed directly (not recommended for production)
                 import os
+                from pathlib import Path
+
                 api_key = os.environ.get('ANTHROPIC_API_KEY')
+
+                # Try loading from .env file if not in environment
+                if not api_key:
+                    env_file = Path(__file__).parent.parent.parent.parent / '.env'
+                    if env_file.exists():
+                        try:
+                            with open(env_file, 'r') as f:
+                                for line in f:
+                                    if line.strip().startswith('ANTHROPIC_API_KEY='):
+                                        api_key = line.split('=', 1)[1].strip().strip('"\'')
+                                        if api_key:
+                                            logger.info("Loaded API key from .env file")
+                                            break
+                        except Exception as e:
+                            logger.debug(f"Could not read .env file: {e}")
+
                 if api_key:
                     self.claude_client = anthropic.Anthropic(api_key=api_key)
+                    logger.info("Claude AI client initialized successfully")
                 else:
                     # Try default initialization (will use ANTHROPIC_API_KEY env var)
                     self.claude_client = anthropic.Anthropic()
-                logger.info("Claude AI client initialized successfully")
+                    logger.info("Claude AI client initialized with default settings")
             except Exception as e:
                 logger.warning(f"Claude AI initialization failed: {e}")
-                logger.warning("AI features disabled. Set ANTHROPIC_API_KEY environment variable to enable.")
+                logger.warning("AI features disabled. Set ANTHROPIC_API_KEY environment variable or add to .env file to enable.")
                 self.use_ai = False
                 self.claude_client = None
 
@@ -194,7 +215,13 @@ class PatternDiscoveryAgent:
         """
         patterns = []
 
-        if 'clean_name' not in df.columns:
+        # Use clean_name if available (from preprocessing), otherwise use EXCLUDE_OWNER_NAME from Snowflake
+        if 'clean_name' in df.columns:
+            name_col = 'clean_name'
+        elif 'EXCLUDE_OWNER_NAME' in df.columns:
+            name_col = 'EXCLUDE_OWNER_NAME'
+        else:
+            logger.warning("No name column found in dataframe. Available columns: %s", df.columns.tolist())
             return patterns
 
         # Analyze name components
@@ -203,7 +230,22 @@ class PatternDiscoveryAgent:
         prefix_patterns = defaultdict(list)
 
         for idx, row in df.iterrows():
-            name = str(row.get('clean_name', ''))
+            # Get name - if using EXCLUDE_OWNER_NAME, clean it
+            name = str(row.get(name_col, ''))
+
+            # Clean the name if it's not already clean
+            if name_col == 'EXCLUDE_OWNER_NAME':
+                # Import clean_text from owner_matcher
+                try:
+                    import sys
+                    from pathlib import Path
+                    sys.path.append(str(Path(__file__).parent.parent.parent.parent))
+                    from owner_matcher.text_utils import clean_text
+                    name = clean_text(name)
+                except Exception as e:
+                    logger.warning(f"Could not import clean_text: {e}. Using raw name.")
+                    name = name.lower()
+
             if len(name) < 3:
                 continue
 
@@ -216,7 +258,7 @@ class PatternDiscoveryAgent:
                 if last_word in ['llc', 'inc', 'corp', 'ltd', 'lp', 'trust']:
                     suffix_patterns[last_word].append({
                         'name': name,
-                        'id': row.get('Previous Owner ID', '')
+                        'id': row.get('old_owner_id', row.get('OLD_OWNER_ID', ''))
                     })
 
             # Check for common prefixes
@@ -225,7 +267,7 @@ class PatternDiscoveryAgent:
                 if len(first_word) > 2:
                     prefix_patterns[first_word].append({
                         'name': name,
-                        'id': row.get('Previous Owner ID', '')
+                        'id': row.get('old_owner_id', row.get('OLD_OWNER_ID', ''))
                     })
 
             # Count word frequencies
@@ -238,10 +280,18 @@ class PatternDiscoveryAgent:
             if count >= self.min_pattern_frequency:
                 examples = []
                 for idx, row in df.iterrows():
-                    if component in str(row.get('clean_name', '')):
+                    name = str(row.get(name_col, ''))
+                    if name_col != 'clean_name':
+                        try:
+                            from owner_matcher.text_utils import clean_text
+                            name = clean_text(name)
+                        except:
+                            name = name.lower()
+
+                    if component in name:
                         examples.append({
-                            'name': row.get('Owner Name', ''),
-                            'clean_name': row.get('clean_name', '')
+                            'name': row.get(name_col, ''),
+                            'clean_name': name
                         })
                         if len(examples) >= 5:
                             break
@@ -298,7 +348,7 @@ class PatternDiscoveryAgent:
                 patterns.append(PatternCandidate(
                     pattern_type='address_po_box_variation',
                     pattern_value=variation,
-                    examples=[{'address': address, 'id': row.get('Previous Owner ID', '')}],
+                    examples=[{'address': address, 'id': row.get('OLD_OWNER_ID', '')}],
                     frequency=1,
                     confidence=0.8,
                     description=f"PO Box variation: '{variation}'"
@@ -341,15 +391,27 @@ class PatternDiscoveryAgent:
 
         temporal_matches = defaultdict(list)
 
+        # Determine name column
+        name_col = None
+        # Use clean_name or EXCLUDE_OWNER_NAME from Snowflake
+        if 'clean_name' in df.columns:
+            name_col = 'clean_name'
+        elif 'EXCLUDE_OWNER_NAME' in df.columns:
+            name_col = 'EXCLUDE_OWNER_NAME'
+
+        if name_col is None:
+            logger.warning("No name column found for temporal pattern discovery")
+            return patterns
+
         for idx, row in df.iterrows():
-            name = str(row.get('Owner Name', '')).lower()
+            name = str(row.get(name_col, '')).lower()
 
             for indicator in temporal_indicators:
                 if indicator in name:
                     temporal_matches[indicator].append({
-                        'name': row.get('Owner Name', ''),
-                        'clean_name': row.get('clean_name', ''),
-                        'id': row.get('Previous Owner ID', '')
+                        'name': row.get(name_col, ''),
+                        'clean_name': row.get('clean_name', name),
+                        'id': row.get('old_owner_id', row.get('OLD_OWNER_ID', ''))
                     })
 
         # Create patterns for frequent temporal indicators
@@ -388,16 +450,20 @@ class PatternDiscoveryAgent:
 
         abbrev_mismatches = defaultdict(list)
 
+        # Determine name columns
+        name_col = 'clean_name' if 'clean_name' in df.columns else 'EXCLUDE_OWNER_NAME'
+        clean_col = 'clean_name' if 'clean_name' in df.columns else name_col
+
         for idx, row in df.iterrows():
-            name = str(row.get('clean_name', '')).lower()
+            name = str(row.get(clean_col, '')).lower()
 
             for full_form, abbrevs in abbreviations.items():
                 for abbrev in abbrevs:
                     if abbrev in name:
                         abbrev_mismatches[f"{full_form}_variations"].append({
-                            'name': row.get('Owner Name', ''),
+                            'name': row.get(name_col, ''),
                             'variation': abbrev,
-                            'id': row.get('Previous Owner ID', '')
+                            'id': row.get('old_owner_id', row.get('OLD_OWNER_ID', ''))
                         })
 
         # Create patterns for abbreviation mismatches
@@ -430,15 +496,26 @@ class PatternDiscoveryAgent:
             'irrevocable trust', 'testamentary trust', 'charitable trust'
         ]
 
+        # Determine name column
+        name_col = None
+        # Use clean_name or EXCLUDE_OWNER_NAME from Snowflake
+        if 'clean_name' in df.columns:
+            name_col = 'clean_name'
+        elif 'EXCLUDE_OWNER_NAME' in df.columns:
+            name_col = 'EXCLUDE_OWNER_NAME'
+
+        if name_col is None:
+            return patterns
+
         for idx, row in df.iterrows():
-            name = str(row.get('Owner Name', '')).lower()
+            name = str(row.get(name_col, '')).lower()
 
             for keyword in trust_keywords:
                 if keyword in name:
                     trust_types[keyword].append({
-                        'name': row.get('Owner Name', ''),
-                        'clean_name': row.get('clean_name', ''),
-                        'id': row.get('Previous Owner ID', '')
+                        'name': row.get(name_col, ''),
+                        'clean_name': row.get('clean_name', name),
+                        'id': row.get('old_owner_id', row.get('OLD_OWNER_ID', ''))
                     })
 
         # Create patterns for trust variations
@@ -468,14 +545,18 @@ class PatternDiscoveryAgent:
         if not self.use_ai or len(sample_df) == 0:
             return []
 
+        # Determine column names
+        name_col = 'clean_name' if 'clean_name' in sample_df.columns else 'EXCLUDE_OWNER_NAME'
+        clean_col = 'clean_name' if 'clean_name' in sample_df.columns else name_col
+
         # Prepare data for AI analysis
         sample_data = []
         for _, row in sample_df.head(20).iterrows():
             sample_data.append({
-                'name': row.get('Owner Name', ''),
-                'clean_name': row.get('clean_name', ''),
-                'address': row.get('Last Known Address', ''),
-                'state': row.get('State', '')
+                'name': row.get(name_col, ''),
+                'clean_name': row.get(clean_col, ''),
+                'address': row.get('Last Known Address', row.get('LAST_KNOWN_ADDRESS', '')),
+                'state': row.get('State', row.get('OWNER_STATE', ''))
             })
 
         prompt = f"""
@@ -692,29 +773,46 @@ Return your analysis as a JSON array of patterns, each with:
             'common_states': []
         }
 
+        # Determine column names
+        name_col = None
         if 'clean_name' in df.columns:
-            name_lengths = df['clean_name'].str.len()
-            characteristics['name_stats'] = {
-                'avg_length': float(name_lengths.mean()),
-                'min_length': int(name_lengths.min()) if not name_lengths.empty else 0,
-                'max_length': int(name_lengths.max()) if not name_lengths.empty else 0,
-                'short_names': int((name_lengths < 5).sum()),
-                'single_word': int((df['clean_name'].str.split().str.len() == 1).sum())
-            }
+            name_col = 'clean_name'
+        elif 'EXCLUDE_OWNER_NAME' in df.columns:
+            name_col = 'EXCLUDE_OWNER_NAME'
 
-        if 'State' in df.columns:
-            state_counts = df['State'].value_counts()
+        if name_col and name_col in df.columns:
+            name_lengths = df[name_col].astype(str).str.len()
+            if not name_lengths.empty:
+                characteristics['name_stats'] = {
+                    'avg_length': float(name_lengths.mean()),
+                    'min_length': int(name_lengths.min()),
+                    'max_length': int(name_lengths.max()),
+                    'short_names': int((name_lengths < 5).sum()),
+                    'single_word': int((df[name_col].astype(str).str.split().str.len() == 1).sum())
+                }
+
+        # State column
+        state_col = 'State' if 'State' in df.columns else 'OWNER_STATE'
+        if state_col in df.columns:
+            state_counts = df[state_col].value_counts()
             characteristics['common_states'] = [
                 {'state': state, 'count': int(count)}
                 for state, count in state_counts.head(5).items()
             ]
 
+        # Address column
+        addr_col = None
         if 'Last Known Address' in df.columns:
-            has_address = df['Last Known Address'].notna()
+            addr_col = 'Last Known Address'
+        elif 'LAST_KNOWN_ADDRESS' in df.columns:
+            addr_col = 'LAST_KNOWN_ADDRESS'
+
+        if addr_col and addr_col in df.columns:
+            has_address = df[addr_col].notna()
             characteristics['address_stats'] = {
                 'has_address': int(has_address.sum()),
                 'missing_address': int((~has_address).sum()),
-                'has_po_box': int(df['Last Known Address'].str.contains(
+                'has_po_box': int(df[addr_col].astype(str).str.contains(
                     r'p\.?\s*o\.?\s*box', case=False, na=False
                 ).sum())
             }

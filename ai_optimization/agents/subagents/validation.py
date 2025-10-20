@@ -193,7 +193,7 @@ class ValidationAgent:
         logger.info(f"Starting validation of {len(matches_df)} matches")
 
         # Filter to matched records only
-        matched_df = matches_df[matches_df['mapped_new_id'].notna()].copy()
+        matched_df = matches_df[matches_df['new_id'].notna()].copy()
 
         if len(matched_df) == 0:
             logger.warning("No matches to validate")
@@ -261,7 +261,7 @@ class ValidationAgent:
         """
         # Extract relevant fields
         old_owner_id = match_row.get('old_owner_id', '')
-        new_owner_id = match_row.get('mapped_new_id', '')
+        new_owner_id = match_row.get('new_id', '')
         confidence_score = match_row.get('confidence_score', 0)
         match_step = match_row.get('match_step', '')
         name_score = match_row.get('name_score', 0)

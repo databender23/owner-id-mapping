@@ -30,11 +30,11 @@ OUTPUT_FILE = os.getenv(
     str(OUTPUT_DIR / "mapped_owners.csv")
 )
 
-# Matching thresholds
-NAME_THRESHOLD = 70  # Minimum fuzzy name match score
-ADDRESS_THRESHOLD = 75  # Minimum address match score for address-first strategy
-ADDRESS_MIN = 60  # Minimum address score for name-based matches
-ADDRESS_FIRST_NAME_THRESHOLD = 60  # Minimum name score when address matches first
+# Matching thresholds (Ultra-aggressive optimization for 85% match rate goal)
+NAME_THRESHOLD = 50  # Minimum fuzzy name match score (ultra-aggressive for 85% goal)
+ADDRESS_THRESHOLD = 60  # Minimum address match score for address-first strategy
+ADDRESS_MIN = 35  # Minimum address score for name-based matches (very lenient)
+ADDRESS_FIRST_NAME_THRESHOLD = 40  # Minimum name score when address matches first
 
 # Text cleaning patterns
 CLEAN_PUNCT = r'[^\w\s]'  # Regex pattern to remove punctuation
@@ -109,9 +109,8 @@ NEW_COLUMNS = {
 
 # Confidence score thresholds for match types
 CONFIDENCE_SCORES = {
-    'DIRECT_ID_MATCH': 100,
+    # DIRECT_ID_MATCH removed - IDs are reindexed annually
     'EXACT_NAME': 100,
-    'ADDRESS_ATTN_MATCH': 95,
     'ADDRESS_NAME_MATCH': 90,
     'CONFIRMED_FUZZY': 85,
     'FUZZY_NAME': (75, 85),  # Range based on name_score

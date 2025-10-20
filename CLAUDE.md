@@ -4,19 +4,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is an **Enhanced Owner ID Mapping System** with AI-powered optimization that performs fuzzy string matching between two datasets of oil & gas owners to map previous owner IDs to new owner IDs.
+This is an **Enhanced Owner ID Mapping System** with AI-powered optimization that performs fuzzy string matching between two datasets of oil & gas owners to map owner names to new owner IDs.
 
 The system features:
-- **Core Matching Engine**: Cascading match strategy with 6 fallback approaches
+- **Core Matching Engine**: Cascading match strategy with 10+ fallback approaches
+- **Snowflake Integration**: Direct database queries for fresh data with SQL pre-matching
+- **Intelligent Workflow**: Separates SQL-matched records from fuzzy matching candidates
 - **AI Optimization System**: Hierarchical subagent architecture for continuous improvement
 - **Persistent Learning**: Context management across optimization iterations
 - **Temporal Pattern Analysis**: Specialized handling of name changes over time
 - **Parallel Execution**: AsyncIO-based concurrent processing for 3-5x faster optimization
 
-Current Performance:
-- Baseline: 5.9% match rate (147/2,484 owners)
-- Target: 30-40% match rate through AI optimization
-- False Positive Rate: <2% with validation
+Current Performance (as of October 20, 2025):
+- **Overall Match Rate: 87.2%** (3,700/4,244 owners)
+  - SQL Direct Matches: 38.2% (1,622 records)
+  - Fuzzy Matches: 49.0% (2,078 records)
+- High Confidence (90-100): 54% of all matches
+- Medium Confidence (75-89): 8% of matches
+- Low Confidence (50-74): 37% of matches
+
+⚠️ **CRITICAL DATA QUALITY ISSUE**: 203 NEW_OWNER_IDs in production are assigned to multiple different companies, affecting match accuracy. See DATA_QUALITY_REPORT.md for details.
 
 ## Repository Structure
 
@@ -102,28 +109,40 @@ The matching engine is organized into focused modules:
    - `OwnerMapper`: Orchestrator that runs cascade
    - `MatchResult`: Dataclass for match results
 
-6. **main.py** - CLI and orchestration
-   - Argument parsing with argparse (includes `--use-snowflake` flag)
-   - Data loading and validation (Excel or Snowflake)
-   - Preprocessing pipeline
-   - Match execution with progress bars
-   - Results output and summary statistics
+6. **main.py** - CLI and orchestration (UPDATED)
+   - **Two Distinct Workflows**:
+     - `map_owners_snowflake()`: Optimized Snowflake workflow with SQL pre-matching
+     - `map_owners_legacy()`: Original Excel file workflow
+   - **Enhanced Preprocessing**:
+     - `preprocess_snowflake_data()`: Separates SQL-matched from unmatched records
+   - **Detailed Output**: Includes full address information from both sources
+   - **Command Line Arguments**:
+     - `--use-snowflake`: Use Snowflake workflow (RECOMMENDED)
+     - `--timestamp`: Generate timestamped reports
+     - `--debug`: Enable detailed logging
+   - **Smart Matching**: Only runs fuzzy matching on unmatched records
 
-### Cascading Match Strategy (6 Steps)
+### Cascading Match Strategy (10+ Steps)
 
 The system processes each owner through a cascade of increasingly fuzzy matching strategies:
 
-0. **Direct ID Match**: Exact match on `OLD_OWNER_ID` field
-1. **Exact Name Match**: Character-for-character name matching after cleaning
+**NOTE**: DirectIDMatcher has been removed as IDs are reindexed annually, making OLD_OWNER_ID matching invalid.
+
+1. **Exact Name Match**: Character-for-character name matching after cleaning with city/state validation
 2. **Address-First Matching**: The most complex and unique step
-   - Matches primarily on address (75% threshold)
-   - Then validates name similarity (60% threshold)
+   - Matches primarily on address (60% threshold)
+   - Then validates name similarity (40% threshold)
    - Handles duplicate address scenarios by finding best match
-   - Can match on either main name OR attention name
+   - Validates city and state match
    - This is the PRIMARY matching strategy that differs from typical name-first approaches
-3. **Fuzzy Name Matching**: Token-based matching with address validation
-4. **Cross-State Matching**: Remove state filter for high-confidence matches
-5. **Partial Name Matching**: Substring/expansion matching for long names
+3. **Estate Transition Matching**: Handles estate and trust ownership transitions
+4. **Fuzzy Name Matching**: Token-based matching with address validation (50% threshold)
+5. **Temporal Pattern Matching**: Handles name changes over time (separators, attention lines, etc.)
+6. **Cross-State Matching**: Remove state filter for high-confidence matches
+7. **Address-Only Matching**: Match primarily on address with minimal name validation
+8. **Initial Matching**: Match based on first/last initials plus address
+9. **Partial Name Matching**: Substring/expansion matching for long names
+10. **Last Resort Matching**: Ultra-aggressive matching on any significant word match
 
 See `MATCHING_STRATEGY.md` for detailed algorithm documentation.
 
@@ -164,62 +183,111 @@ The AI optimization system enhances matching through iterative learning:
    - **Temporal Specialization**: Dedicated handling of name changes
    - **Continuous Improvement**: Real-time adaptation
 
-### Data Flow
+### Data Flow (Updated for Snowflake Workflow)
 
 ```
 Snowflake Database (MINERALHOLDERS_DB)
     ↓ (sql/generate_excluded_owners_comparison.sql)
-data/raw/excluded_owners_comparison.xlsx
-data/raw/missing_owners_report.xlsx
-    ↓ (Load & validate)
-pd.DataFrame (old_owners, new_owners)
-    ↓ (Preprocess: clean text, parse addresses)
-pd.DataFrame (with clean_name, clean_address fields)
-    ↓ (Match: cascade through strategies)
-List[MatchResult]
-    ↓ (Calculate confidence, determine review priority)
-pd.DataFrame (results)
+DataFrame with SQL pre-matching results
+    ↓ (Separate by NEW_OWNER_ID presence)
+    ├─→ Already Matched (1,622 records) → Direct to results
+    └─→ Needs Matching (2,622 records) → Fuzzy matching
+         ↓ (Preprocess: clean text, parse addresses)
+         ↓ (Match against already-matched records as candidates)
+         ↓ (Cascade through 6 strategies)
+         ↓ (168 additional matches found)
+Combined Results (1,790 total matches)
     ↓ (Sort by confidence, save)
 outputs/mapped_owners.csv
+outputs/unmatched_records_[timestamp].csv (optional)
+outputs/matching_report_[timestamp].txt (optional)
 ```
 
-**Data Generation:**
-- Input Excel files are generated from Snowflake using queries in `sql/` directory
-- `excluded_owners_comparison.xlsx`: Maps EXCLUDE_OWNERS to production IDs
-- `missing_owners_report.xlsx`: Owners from old system not in production
-- See `sql/README.md` for query documentation and customization
+**Key Workflow Improvements:**
+- **SQL Pre-Matching**: Snowflake query identifies direct matches first
+- **Intelligent Separation**: Only unmatched records go through fuzzy matching
+- **Proper Candidate Pool**: Fuzzy matching uses production records as candidates
+- **No Redundant Processing**: Avoids re-matching already matched records
 
 ## Running the System
 
-### Setup
+### ⚠️ IMPORTANT: Always Use Virtual Environment and Snowflake
+
+**The proper way to run this system:**
+
+1. **ALWAYS activate the virtual environment first**
+2. **ALWAYS use `--use-snowflake` for fresh data**
+3. **Consider using `--timestamp` for tracking iterations**
+
+### Setup (One-Time)
 ```bash
-# Install core dependencies
+# Create virtual environment (if not exists)
+python -m venv venv
+
+# Activate virtual environment
+source venv/bin/activate  # On macOS/Linux
+# or
+venv\Scripts\activate  # On Windows
+
+# Install dependencies in venv
 pip install -r requirements.txt
 
 # For AI optimization (optional but recommended)
 pip install -r ai_optimization/requirements-ai.txt
 ```
 
-### Basic Matching (Original System)
+### Standard Workflow (RECOMMENDED)
 ```bash
-# Run with Excel files (default)
-python -m owner_matcher.main
+# ALWAYS start by activating venv
+source venv/bin/activate
 
-# Query directly from Snowflake (recommended)
+# Run with fresh Snowflake data (RECOMMENDED - always use this)
 python -m owner_matcher.main --use-snowflake
 
-# Custom input/output files
+# Run with timestamped reports for tracking
+python -m owner_matcher.main --use-snowflake --timestamp
+
+# Enable debug logging if troubleshooting
+python -m owner_matcher.main --use-snowflake --debug
+```
+
+### Legacy Excel Workflow (NOT RECOMMENDED)
+```bash
+# Only use if you specifically need to process old Excel files
+source venv/bin/activate
 python -m owner_matcher.main \
   --old-file path/to/old_owners.xlsx \
-  --new-file path/to/new_owners.xlsx \
-  --output-file path/to/output.csv
+  --new-file path/to/new_owners.xlsx
 
-# Enable debug logging
-python -m owner_matcher.main --debug
+# Note: This bypasses SQL pre-matching and may give inferior results
 ```
+
+### Output Files
+
+The system generates comprehensive output files with detailed validation information:
+
+**Main Output File (`mapped_owners.csv`):**
+- **OLD_OWNER_ID**: Original owner identifier
+- **NEW_OWNER_ID**: Matched production owner ID (null if unmatched)
+- **OLD_NAME**: Original owner name from exclude list
+- **OLD_ADDRESS, OLD_CITY, OLD_STATE, OLD_ZIP**: Complete original address
+- **NEW_NAME**: Matched production owner name
+- **NEW_ADDRESS, NEW_CITY, NEW_STATE, NEW_ZIP**: Complete production address
+- **MATCH_TYPE**: SQL_DIRECT or FUZZY_[strategy]
+- **confidence_score**: Match confidence (0-100)
+- **name_score, address_score**: Individual component scores
+- **status**: Detailed match status
+- **suggested_action**: Recommended next step
+
+**Additional Files (with `--timestamp`):**
+- `unmatched_records_[timestamp].csv`: Records requiring manual review
+- `matching_report_[timestamp].txt`: Summary statistics and breakdown
 
 ### AI-Powered Optimization (NEW)
 ```bash
+# ALWAYS activate venv first
+source venv/bin/activate
+
 # Run continuous optimization (recommended)
 python ai_optimization/run_optimization.py \
   --max-iterations 5 \
@@ -255,11 +323,11 @@ The AI optimization:
 
 Edit `owner_matcher/config.py` to adjust:
 
-**Thresholds:**
-- `NAME_THRESHOLD = 70`: Minimum fuzzy name match score
-- `ADDRESS_THRESHOLD = 75`: Minimum address match score for address-first strategy
-- `ADDRESS_MIN = 60`: Minimum address score for name-based matches
-- `ADDRESS_FIRST_NAME_THRESHOLD = 60`: Minimum name score when address matches first
+**Current Thresholds (Ultra-Aggressive for 87% Match Rate):**
+- `NAME_THRESHOLD = 50`: Minimum fuzzy name match score (lowered from 70)
+- `ADDRESS_THRESHOLD = 60`: Minimum address match score for address-first strategy (lowered from 75)
+- `ADDRESS_MIN = 35`: Minimum address score for name-based matches (lowered from 60)
+- `ADDRESS_FIRST_NAME_THRESHOLD = 40`: Minimum name score when address matches first (lowered from 60)
 
 **File Paths:**
 - Can be overridden via environment variables:
@@ -392,12 +460,15 @@ Each match produces:
 - `address_score`: Address similarity (0-100)
 
 Confidence stratification:
-- Direct ID/Exact Name: 100
-- Address+Attention: 95
+- Exact Name: 100
 - Address+Name: 90
 - Confirmed Fuzzy: 85
+- Estate/Temporal Transitions: 80-85
 - Fuzzy Name: 75-85
 - Cross-state/Partial: 50-80
+- Address-Only/Initial/Last Resort: 40-75
+
+**Note**: DIRECT_ID_MATCH removed - IDs are reindexed annually.
 
 See `config.CONFIDENCE_SCORES` for exact mappings.
 
@@ -556,6 +627,53 @@ sqlite3 ai_optimization/context_store/patterns.db "SELECT COUNT(*) FROM patterns
 5. **Parallel Agents**: Keep `parallel_execution: true` for speed
 6. **Threshold Tuning**: Let AI suggest changes, but review before applying
 
+## Recent Changes (October 20, 2025)
+
+### Critical Data Quality Issue Discovered
+- **203 NEW_OWNER_IDs** are incorrectly assigned to multiple different companies in production
+- Example: ID 1088737 is assigned to BP America, State Of Texas, Buckhorn Minerals, and Texco Partners
+- This creates false positives where unrelated companies appear to match
+- See `DATA_QUALITY_REPORT.md` and `outputs/duplicate_owner_ids_report.csv` for full details
+
+### Matching System Updates
+1. **Removed DirectIDMatcher**: IDs are reindexed annually, making OLD_OWNER_ID matching invalid
+2. **Enhanced Validation**: Added original name similarity checks to prevent false positives from data quality issues
+3. **City/State Validation**: Strict location validation for all matching strategies
+4. **Expanded Strategies**: Added 5 new matching strategies (Estate, Temporal, Address-Only, Initial, Last Resort)
+5. **Aggressive Thresholds**: Lowered thresholds significantly to achieve 87.2% match rate
+
+### AI Optimization Fixes
+The AI optimization system had several critical issues that have been resolved:
+
+1. **Pattern Discovery Agent**: Fixed column name handling
+   - Now adapts to actual column names in the data
+   - Integrated `clean_text()` function for on-the-fly cleaning
+   - All pattern discovery methods updated for flexibility
+
+2. **Data Preprocessing**: Added `clean_name` column creation
+   - Preprocessing step in `run_matching_iteration()`
+   - Uses consistent text normalization
+
+3. **Validation Agent**: Fixed parameter passing
+   - Corrected parameter name from 'matches' to 'matches_df'
+   - Proper None values for optional parameters
+
+4. **Temporal Analyzer**: Updated column name handling
+   - Checks multiple possible column names
+   - Graceful fallback through variations
+
+5. **Robustness Improvements**:
+   - All agents handle multiple column name formats
+   - Graceful fallbacks when expected columns missing
+   - Works with both Snowflake and Excel workflows
+   - No hard-coded assumptions about column names
+
+### Key Functions Updated
+- `map_owners_snowflake()`: Optimized workflow for Snowflake data
+- `preprocess_snowflake_data()`: Intelligently separates and preprocesses matched/unmatched records
+- Enhanced output with full address details for validation
+- All matchers updated with city/state validation and original name verification
+
 ## Common Tasks
 
 ### Adjust matching to be more aggressive (more matches, higher false positive risk)
@@ -671,15 +789,34 @@ from ai_optimization.agents.subagents.temporal_analyzer import TemporalAnalyzerA
 
 ## Performance Metrics
 
-### Current System Performance
+### Current System Performance (October 20, 2025)
 - **Baseline (Manual)**: 5.9% match rate (147/2,484)
-- **With AI Optimization**: 30-40% expected match rate
+- **Current Performance**: 87.2% match rate (3,700/4,244 records)
+  - SQL Direct: 1,622 (38.2%)
+  - Fuzzy Matches: 2,078 (49.0%)
+- **Confidence Distribution**:
+  - High (90-100): 2,016 matches (54%)
+  - Medium (75-89): 313 matches (8%)
+  - Low (50-74): 1,371 matches (37%)
 - **Processing Speed**: 3-5x faster with parallel agents
-- **Convergence**: 3-5 iterations vs 10+ manual iterations
-- **False Positive Rate**: <2% with validation
+- **False Positive Risk**: HIGH due to aggressive thresholds and data quality issues
+
+### Match Type Breakdown (Fuzzy Matches)
+- ADDRESS_ONLY: 1,171 (56% of fuzzy matches) - LOW CONFIDENCE
+- ADDRESS_NAME_MATCH: 366 (18%)
+- TEMPORAL_FUZZY_MATCH: 264 (13%)
+- LAST_RESORT: 178 (9%) - VERY LOW CONFIDENCE
+- EXACT_NAME: 28 (1%)
+- Other strategies: 71 (3%)
 
 ### Optimization Benchmarks
 - Pattern Discovery: ~100-200 patterns per iteration
 - Temporal Analysis: 30-40% improvement on name changes
 - Threshold Tuning: 2-5% incremental improvements
 - Overall Runtime: 5-10 minutes per iteration
+
+### Data Quality Impact
+- 203 NEW_OWNER_IDs with multiple company names
+- Affects ~800-1000 records
+- Creates ambiguity in matching results
+- Requires manual validation for affected IDs
