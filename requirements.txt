@@ -1,0 +1,7 @@
+pandas>=2.0.0
+rapidfuzz>=3.0.0
+openpyxl>=3.0.0
+usaddress==0.5.10
+tqdm>=4.65.0
+snowflake-connector-python>=3.0.0
+cryptography>=41.0.0

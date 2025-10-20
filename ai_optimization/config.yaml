@@ -1,0 +1,214 @@
+# AI Optimization System Configuration
+# Enhanced version with subagent architecture support
+
+# System Configuration
+system:
+  mode: "enhanced"  # Options: "basic", "enhanced"
+  max_iterations: 10
+  convergence_threshold: 0.01  # Stop when improvement < 1%
+  checkpoint_frequency: 1  # Save checkpoint every N iterations
+
+# API Configuration
+api:
+  provider: "anthropic"
+  model: "claude-3-5-sonnet-20241022"
+  max_tokens: 4096
+  temperature: 0.3
+  timeout: 60
+  retry_attempts: 3
+  retry_delay: 2  # seconds
+  batch_size: 10  # Records per API call
+
+# Database Configuration
+database:
+  context_store_path: "context_store/"
+  patterns_db: "context_store/patterns.db"
+  strategies_db: "context_store/strategies.db"
+  validated_matches_db: "context_store/validated_matches.db"
+  checkpoint_file: "context_store/learning_checkpoint.json"
+
+# Orchestrator Configuration
+orchestrator:
+  parallel_execution: true
+  max_concurrent_agents: 5
+  timeout_per_agent: 300  # seconds
+  synthesis_strategy: "weighted_consensus"  # Options: "majority_vote", "weighted_consensus", "hierarchical"
+  decision_threshold: 0.7
+
+# Subagent Configuration
+agents:
+  pattern_discovery:
+    enabled: true
+    batch_size: 100
+    min_pattern_frequency: 3
+    confidence_threshold: 0.8
+    pattern_types:
+      - "name_variations"
+      - "address_formats"
+      - "temporal_changes"
+      - "abbreviations"
+      - "trust_patterns"
+    priority: "high"
+
+  validation:
+    enabled: true
+    sample_size: 0.5  # Percentage of matches to validate
+    batch_size: 20
+    validation_criteria:
+      - "name_coherence"
+      - "address_proximity"
+      - "business_logic"
+      - "temporal_consistency"
+    false_positive_threshold: 0.1
+    priority: "high"
+
+  strategy_optimization:
+    enabled: true
+    test_sample_size: 200
+    strategies:
+      - "direct_id"
+      - "exact_name"
+      - "address_first"
+      - "fuzzy_name"
+      - "cross_state"
+      - "partial_name"
+      - "temporal_core"  # New: Core name extraction
+      - "phonetic"       # New: Soundex/Metaphone
+    performance_window: 5  # Last N iterations
+    priority: "medium"
+
+  threshold_tuning:
+    enabled: true
+    sensitivity_analysis: true
+    parameters:
+      - name: "NAME_THRESHOLD"
+        min: 50
+        max: 90
+        step: 2
+        current: 70
+      - name: "ADDRESS_THRESHOLD"
+        min: 60
+        max: 90
+        step: 2
+        current: 75
+      - name: "ADDRESS_MIN"
+        min: 40
+        max: 80
+        step: 5
+        current: 60
+      - name: "ADDRESS_FIRST_NAME_THRESHOLD"
+        min: 45
+        max: 75
+        step: 5
+        current: 60
+    max_adjustment_per_iteration: 5
+    priority: "medium"
+
+  temporal_analyzer:
+    enabled: true
+    separators:
+      - ";"
+      - "Attn:"
+      - "ATTN:"
+      - "c/o"
+      - "C/O"
+      - "%"
+      - "Estate of"
+      - "ESTATE OF"
+    core_match_threshold: 85
+    temporal_indicators:
+      - "estate"
+      - "deceased"
+      - "successor"
+      - "trustee"
+    priority: "high"
+
+  meta_learner:
+    enabled: true
+    learning_rate: 0.1
+    memory_window: 10  # Iterations
+    convergence_detection:
+      min_iterations: 3
+      improvement_threshold: 0.01
+      confidence_level: 0.95
+    recommendation_types:
+      - "continue"
+      - "pivot_strategy"
+      - "adjust_thresholds"
+      - "stop_optimization"
+    priority: "low"
+
+# Learning Configuration
+learning:
+  continuous_learning: true
+  feedback_loop: true
+  feature_extraction:
+    - "name_length"
+    - "word_count"
+    - "has_attention_line"
+    - "has_po_box"
+    - "state_match"
+    - "address_completeness"
+    - "trust_keywords"
+    - "corporate_keywords"
+  model_update_frequency: "per_iteration"
+  validation_split: 0.2
+
+# Parallel Execution Configuration
+parallel:
+  use_asyncio: true
+  max_workers: 4
+  queue_size: 100
+  task_timeout: 300
+  batch_processing: true
+  chunk_size: 50
+
+# Reporting Configuration
+reporting:
+  generate_reports: true
+  report_format: "markdown"  # Options: "markdown", "html", "json"
+  include_visualizations: true
+  metrics_to_track:
+    - "match_rate"
+    - "false_positive_rate"
+    - "confidence_distribution"
+    - "strategy_effectiveness"
+    - "threshold_evolution"
+    - "convergence_rate"
+  dashboard_update: "real_time"
+
+# Safety Configuration
+safety:
+  require_human_approval: true
+  max_false_positive_rate: 0.1
+  min_confidence_for_auto_apply: 0.9
+  rollback_enabled: true
+  audit_trail: true
+  test_before_apply: true
+  test_sample_size: 100
+
+# Logging Configuration
+logging:
+  level: "INFO"  # Options: "DEBUG", "INFO", "WARNING", "ERROR"
+  file: "ai_optimization/logs/optimization.log"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  rotate: true
+  max_size: "10MB"
+  backup_count: 5
+
+# Performance Optimization
+performance:
+  cache_enabled: true
+  cache_size: 1000
+  compression: true
+  lazy_loading: true
+  precompute_features: true
+  index_patterns: true
+
+# Integration Configuration
+integration:
+  owner_matcher_path: "../owner_matcher"
+  snowflake_enabled: true
+  excel_fallback: true
+  auto_reload_data: false
+  data_cache_ttl: 3600  # seconds

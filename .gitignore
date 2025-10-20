@@ -1,0 +1,60 @@
+# Sensitive files
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# AI Optimization
+ai_optimization/logs/*.log
+ai_optimization/context_store/*.db
+ai_optimization/context_store/*.json
+ai_optimization/iterations/*/
+
+# Data files (may contain sensitive information)
+outputs/*.csv
+data/raw/*.xlsx
+data/raw/*.csv
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Jupyter notebooks
+.ipynb_checkpoints/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment files
+.env
+.env.local
